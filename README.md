@@ -467,7 +467,31 @@ waypoint_api
 waypoint_web
 ```
 
-### Step 3 — Seed the Database
+### Step 3 — Add the Competition Dataset
+
+The competition-provided datasets are intentionally **not included in this repository**.
+
+Before seeding the database, place the supplied dataset files inside:
+
+```text
+data/seed/
+```
+
+Expected files:
+
+```text
+calendar.csv
+deliveries_train.csv
+district_travel.csv
+outlets.csv
+service_allowance.csv
+task2b_peak_day_fleet.csv
+vehicles.csv
+```
+
+Do not redistribute these competition-provided datasets publicly.
+
+After the files are available, seed the database:
 
 ```bash
 docker compose exec api python -m scripts.seed
@@ -484,8 +508,6 @@ Service allowances seeded: 9
 District travel rows seeded: 12
 Vehicle availability rows seeded: 38
 ```
-
-The seed process may take a short time because the historical order dataset contains more than 92,000 records.
 
 ### Step 4 — Open the Application
 
