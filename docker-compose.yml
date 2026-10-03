@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:18
+    container_name: waypoint_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: waypoint_pulse
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - waypoint_postgres_data:/var/lib/postgresql
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+
+    container_name: waypoint_api
+    restart: unless-stopped
+
+    depends_on:
+      - db
+
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/waypoint_pulse
+
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ./apps/web
+
+    container_name: waypoint_web
+    restart: unless-stopped
+
+    depends_on:
+      - api
+
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+
+    ports:
+      - "3000:3000"
+
+volumes:
+  waypoint_postgres_data:
