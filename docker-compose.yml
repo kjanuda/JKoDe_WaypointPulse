@@ -15,6 +15,17 @@ services:
     volumes:
       - waypoint_postgres_data:/var/lib/postgresql
 
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d waypoint_pulse"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   api:
     build:
       context: .
@@ -24,10 +35,20 @@ services:
     restart: unless-stopped
 
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/waypoint_pulse
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      PYTHONUNBUFFERED: "1"
+
+    command:
+      - sh
+      - -c
+      - |
+        python -u -m scripts.seed &&
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
 
     ports:
       - "8000:8000"
@@ -35,6 +56,8 @@ services:
   web:
     build:
       context: ./apps/web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
 
     container_name: waypoint_web
     restart: unless-stopped

@@ -13,6 +13,8 @@ from app.database import get_db
 from app.models.order import Order
 from app.models.trip import Trip
 from app.models.trip_stop import TripStop
+from app.models.user import User
+from app.routers.auth import require_role
 
 
 router = APIRouter(
@@ -30,6 +32,7 @@ class ConfirmReceiptRequest(BaseModel):
 def get_store_deliveries(
     outlet_id: str,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("store")),
 ):
     rows = (
         db.query(
@@ -47,8 +50,7 @@ def get_store_deliveries(
         )
         .filter(
             Order.outlet_id == outlet_id,
-            TripStop.driver_status
-            == "delivered",
+            TripStop.driver_status == "delivered",
         )
         .order_by(
             TripStop.id.desc()
@@ -61,85 +63,41 @@ def get_store_deliveries(
     for stop, order, trip in rows:
         deliveries.append(
             {
-                "stop_id":
-                    stop.id,
-
-                "delivery_id":
-                    order.delivery_id,
-
-                "outlet_id":
-                    order.outlet_id,
-
-                "brand":
-                    order.brand,
-
-                "district":
-                    order.district,
-
-                "temp_requirement":
-                    order.temp_requirement,
-
-                "weight_kg":
-                    order.order_weight_kg,
-
-                "volume_m3":
-                    order.order_volume_m3,
-
-                "vehicle_id":
-                    trip.vehicle_id,
-
-                "trip_number":
-                    trip.trip_number,
-
-                "trip_status":
-                    trip.status,
-
-                "driver_status":
-                    stop.driver_status,
-
-                "receiver_name":
-                    stop.receiver_name,
-
-                "delivery_note":
-                    stop.delivery_note,
-
-                "delivered_at":
-                    stop.delivered_at,
-
-                "receipt_status":
-                    stop.receipt_status,
-
-                "receipt_note":
-                    stop.receipt_note,
-
-                "receipt_confirmed_by":
-                    stop.receipt_confirmed_by,
-
-                "receipt_confirmed_at":
-                    stop.receipt_confirmed_at,
+                "stop_id": stop.id,
+                "delivery_id": order.delivery_id,
+                "outlet_id": order.outlet_id,
+                "brand": order.brand,
+                "district": order.district,
+                "temp_requirement": order.temp_requirement,
+                "weight_kg": order.order_weight_kg,
+                "volume_m3": order.order_volume_m3,
+                "vehicle_id": trip.vehicle_id,
+                "trip_number": trip.trip_number,
+                "trip_status": trip.status,
+                "driver_status": stop.driver_status,
+                "receiver_name": stop.receiver_name,
+                "delivery_note": stop.delivery_note,
+                "delivered_at": stop.delivered_at,
+                "receipt_status": stop.receipt_status,
+                "receipt_note": stop.receipt_note,
+                "receipt_confirmed_by": (
+                    stop.receipt_confirmed_by
+                ),
+                "receipt_confirmed_at": (
+                    stop.receipt_confirmed_at
+                ),
             }
         )
 
     return {
-        "outlet_id":
-            outlet_id,
-
-        "delivery_count":
-            len(deliveries),
-
-        "pending_receipts":
-            sum(
-                1
-                for item
-                in deliveries
-                if item[
-                    "receipt_status"
-                ]
-                != "confirmed"
-            ),
-
-        "deliveries":
-            deliveries,
+        "outlet_id": outlet_id,
+        "delivery_count": len(deliveries),
+        "pending_receipts": sum(
+            1
+            for item in deliveries
+            if item["receipt_status"] != "confirmed"
+        ),
+        "deliveries": deliveries,
     }
 
 
@@ -150,6 +108,7 @@ def confirm_receipt(
     stop_id: int,
     payload: ConfirmReceiptRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("store")),
 ):
     stop = (
         db.query(TripStop)
@@ -165,10 +124,7 @@ def confirm_receipt(
             detail="Delivery stop not found",
         )
 
-    if (
-        stop.driver_status
-        != "delivered"
-    ):
+    if stop.driver_status != "delivered":
         raise HTTPException(
             status_code=400,
             detail=(
@@ -184,14 +140,10 @@ def confirm_receipt(
     if not confirmed_by:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Confirmed by name is required"
-            ),
+            detail="Confirmed by name is required",
         )
 
-    stop.receipt_status = (
-        "confirmed"
-    )
+    stop.receipt_status = "confirmed"
 
     stop.receipt_confirmed_by = (
         confirmed_by
@@ -203,9 +155,7 @@ def confirm_receipt(
         else None
     )
 
-    if (
-        not stop.receipt_confirmed_at
-    ):
+    if not stop.receipt_confirmed_at:
         stop.receipt_confirmed_at = (
             datetime.utcnow()
         )
@@ -214,18 +164,13 @@ def confirm_receipt(
     db.refresh(stop)
 
     return {
-        "stop_id":
-            stop.id,
-
-        "receipt_status":
-            stop.receipt_status,
-
-        "receipt_confirmed_by":
-            stop.receipt_confirmed_by,
-
-        "receipt_note":
-            stop.receipt_note,
-
-        "receipt_confirmed_at":
-            stop.receipt_confirmed_at,
+        "stop_id": stop.id,
+        "receipt_status": stop.receipt_status,
+        "receipt_confirmed_by": (
+            stop.receipt_confirmed_by
+        ),
+        "receipt_note": stop.receipt_note,
+        "receipt_confirmed_at": (
+            stop.receipt_confirmed_at
+        ),
     }

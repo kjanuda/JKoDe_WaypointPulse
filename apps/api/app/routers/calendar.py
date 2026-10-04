@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends
+
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.calendar_day import CalendarDay
+from app.models.user import User
+from app.routers.auth import require_role
 
 
 router = APIRouter(
@@ -12,7 +15,10 @@ router = APIRouter(
 
 
 @router.get("/")
-def get_calendar(db: Session = Depends(get_db)):
+def get_calendar(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("dispatcher")),
+):
     days = (
         db.query(CalendarDay)
         .order_by(CalendarDay.date)

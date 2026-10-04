@@ -10,6 +10,8 @@ from app.models.vehicle import Vehicle
 from app.models.district_travel import DistrictTravel
 from app.models.service_allowance import ServiceAllowance
 from app.models.vehicle_availability import VehicleAvailability
+from app.models.user import User
+from app.routers.auth import require_role
 from app.planner.engine import generate_plan
 from app.planner.validator import validate_order_for_vehicle
 from app.services.plan_persistence import (
@@ -28,6 +30,7 @@ def validate_assignment(
     delivery_id: str,
     vehicle_id: str,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("dispatcher")),
 ):
     order = (
         db.query(Order)
@@ -101,6 +104,7 @@ def generate_delivery_plan(
     plan_date: date,
     depot: str,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("dispatcher")),
 ):
     # ---------------------------------------------------------
     # Get orders for the requested date and depot

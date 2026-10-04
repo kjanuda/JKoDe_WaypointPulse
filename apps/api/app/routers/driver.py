@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Optional
 
@@ -14,6 +13,8 @@ from app.database import get_db
 from app.models.order import Order
 from app.models.trip import Trip
 from app.models.trip_stop import TripStop
+from app.models.user import User
+from app.routers.auth import require_role
 
 
 router = APIRouter(
@@ -31,6 +32,7 @@ class DeliveryRequest(BaseModel):
 def get_driver_trip(
     trip_id: int,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("driver")),
 ):
     trip = (
         db.query(Trip)
@@ -70,54 +72,23 @@ def get_driver_trip(
         stops.append(
             {
                 "stop_id": stop.id,
-                "sequence":
-                    stop.stop_sequence,
-
-                "loader_status":
-                    stop.status,
-
-                "driver_status":
-                    stop.driver_status,
-
-                "receiver_name":
-                    stop.receiver_name,
-
-                "delivery_note":
-                    stop.delivery_note,
-
-                "delivered_at":
-                    stop.delivered_at,
-
-                "arrival_time":
-                    stop.arrival_time,
-
-                "window_open":
-                    stop.window_open,
-
-                "window_close":
-                    stop.window_close,
-
+                "sequence": stop.stop_sequence,
+                "loader_status": stop.status,
+                "driver_status": stop.driver_status,
+                "receiver_name": stop.receiver_name,
+                "delivery_note": stop.delivery_note,
+                "delivered_at": stop.delivered_at,
+                "arrival_time": stop.arrival_time,
+                "window_open": stop.window_open,
+                "window_close": stop.window_close,
                 "order": {
-                    "delivery_id":
-                        order.delivery_id,
-
-                    "outlet_id":
-                        order.outlet_id,
-
-                    "brand":
-                        order.brand,
-
-                    "district":
-                        order.district,
-
-                    "temp_requirement":
-                        order.temp_requirement,
-
-                    "weight_kg":
-                        order.order_weight_kg,
-
-                    "volume_m3":
-                        order.order_volume_m3,
+                    "delivery_id": order.delivery_id,
+                    "outlet_id": order.outlet_id,
+                    "brand": order.brand,
+                    "district": order.district,
+                    "temp_requirement": order.temp_requirement,
+                    "weight_kg": order.order_weight_kg,
+                    "volume_m3": order.order_volume_m3,
                 },
             }
         )
@@ -125,46 +96,22 @@ def get_driver_trip(
     delivered_count = sum(
         1
         for stop in stops
-        if stop["driver_status"]
-        == "delivered"
+        if stop["driver_status"] == "delivered"
     )
 
     return {
-        "trip_id":
-            trip.id,
-
-        "vehicle_id":
-            trip.vehicle_id,
-
-        "trip_number":
-            trip.trip_number,
-
-        "brand":
-            trip.brand,
-
-        "district":
-            trip.district,
-
-        "status":
-            trip.status,
-
-        "distance_km":
-            trip.distance_km,
-
-        "trip_start":
-            trip.trip_start,
-
-        "trip_end":
-            trip.trip_end,
-
-        "delivered_count":
-            delivered_count,
-
-        "total_stops":
-            len(stops),
-
-        "stops":
-            stops,
+        "trip_id": trip.id,
+        "vehicle_id": trip.vehicle_id,
+        "trip_number": trip.trip_number,
+        "brand": trip.brand,
+        "district": trip.district,
+        "status": trip.status,
+        "distance_km": trip.distance_km,
+        "trip_start": trip.trip_start,
+        "trip_end": trip.trip_end,
+        "delivered_count": delivered_count,
+        "total_stops": len(stops),
+        "stops": stops,
     }
 
 
@@ -174,6 +121,7 @@ def get_driver_trip(
 def mark_stop_arrived(
     stop_id: int,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("driver")),
 ):
     stop = (
         db.query(TripStop)
@@ -192,8 +140,7 @@ def mark_stop_arrived(
     if stop.driver_status == "delivered":
         return {
             "stop_id": stop.id,
-            "driver_status":
-                stop.driver_status,
+            "driver_status": stop.driver_status,
         }
 
     stop.driver_status = "arrived"
@@ -203,8 +150,7 @@ def mark_stop_arrived(
 
     return {
         "stop_id": stop.id,
-        "driver_status":
-            stop.driver_status,
+        "driver_status": stop.driver_status,
     }
 
 
@@ -215,6 +161,7 @@ def complete_delivery(
     stop_id: int,
     payload: DeliveryRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("driver")),
 ):
     stop = (
         db.query(TripStop)
@@ -237,9 +184,7 @@ def complete_delivery(
     if not receiver_name:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Receiver name is required"
-            ),
+            detail="Receiver name is required",
         )
 
     # Idempotent:
@@ -261,20 +206,11 @@ def complete_delivery(
     db.refresh(stop)
 
     return {
-        "stop_id":
-            stop.id,
-
-        "driver_status":
-            stop.driver_status,
-
-        "receiver_name":
-            stop.receiver_name,
-
-        "delivery_note":
-            stop.delivery_note,
-
-        "delivered_at":
-            stop.delivered_at,
+        "stop_id": stop.id,
+        "driver_status": stop.driver_status,
+        "receiver_name": stop.receiver_name,
+        "delivery_note": stop.delivery_note,
+        "delivered_at": stop.delivered_at,
     }
 
 
@@ -284,6 +220,7 @@ def complete_delivery(
 def complete_trip(
     trip_id: int,
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("driver")),
 ):
     trip = (
         db.query(Trip)
@@ -316,18 +253,20 @@ def complete_trip(
     incomplete_stops = [
         stop
         for stop in stops
-        if stop.driver_status
-        != "delivered"
+        if stop.driver_status != "delivered"
     ]
 
     if incomplete_stops:
         raise HTTPException(
             status_code=400,
             detail={
-                "message":
-                    "All stops must be delivered before completing trip",
-                "remaining_stops":
-                    len(incomplete_stops),
+                "message": (
+                    "All stops must be delivered "
+                    "before completing trip"
+                ),
+                "remaining_stops": len(
+                    incomplete_stops
+                ),
             },
         )
 
@@ -337,16 +276,8 @@ def complete_trip(
     db.refresh(trip)
 
     return {
-        "trip_id":
-            trip.id,
-
-        "vehicle_id":
-            trip.vehicle_id,
-
-        "trip_number":
-            trip.trip_number,
-
-        "status":
-            trip.status,
+        "trip_id": trip.id,
+        "vehicle_id": trip.vehicle_id,
+        "trip_number": trip.trip_number,
+        "status": trip.status,
     }
-

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -6,6 +7,8 @@ from app.database import get_db
 from app.models.outlet import Outlet
 from app.models.vehicle import Vehicle
 from app.models.calendar_day import CalendarDay
+from app.models.user import User
+from app.routers.auth import require_role
 
 
 router = APIRouter(
@@ -17,6 +20,7 @@ router = APIRouter(
 @router.get("/summary")
 def dashboard_summary(
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("dispatcher")),
 ):
     total_outlets = db.query(func.count(Outlet.id)).scalar()
 

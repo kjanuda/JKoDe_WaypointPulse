@@ -13,6 +13,7 @@ from app.routers import plans
 from app.routers import loader
 from app.routers import driver
 from app.routers import store
+from app.routers import auth
 
 
 # Create database tables
@@ -48,6 +49,7 @@ app.include_router(plans.router)
 app.include_router(loader.router)
 app.include_router(driver.router)
 app.include_router(store.router)
+app.include_router(auth.router)
 
 
 @app.get("/")

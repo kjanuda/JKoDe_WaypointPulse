@@ -13,6 +13,7 @@ from app.models.district_travel import DistrictTravel
 from app.models.vehicle_availability import (
     VehicleAvailability,
 )
+from app.models.auth_session import AuthSession
 
 
 __all__ = [

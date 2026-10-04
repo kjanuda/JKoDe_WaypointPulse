@@ -4,22 +4,41 @@
 
 Waypoint Pulse is an explainable and resilient delivery planning and execution platform developed by **Team JKoDe** for the **Tech-Triathlon 2026 Hackathon**.
 
-The system connects the delivery workflow across four operational roles:
+It connects the delivery workflow across four operational roles: **Dispatcher**, **Loader**, **Driver** and **Store Manager**, from delivery planning through to receipt confirmation.
 
-- Dispatcher
-- Loader
-- Driver
-- Store Manager
+---
 
-The current implementation starts from the provided / seeded order dataset and supports the operational flow from **delivery planning through receipt confirmation**.
+## Table of Contents
+
+1. [Project Overview](#1-project-overview)
+2. [Core Workflow](#2-core-workflow)
+3. [Judge Quick Start](#3-judge-quick-start)
+4. [Judge Walkthrough](#4-judge-walkthrough)
+5. [Main Features](#5-main-features)
+6. [Offline and Recovery Support](#6-offline-and-recovery-support)
+7. [Planning Engine](#7-planning-engine)
+8. [Explainable Deferrals](#8-explainable-deferrals)
+9. [Distance and Fuel](#9-distance-and-fuel)
+10. [Authentication and Security](#10-authentication-and-security)
+11. [Architecture](#11-architecture)
+12. [Technology Stack](#12-technology-stack)
+13. [Project Structure](#13-project-structure)
+14. [Database and Seeded Data](#14-database-and-seeded-data)
+15. [Environment Variables](#15-environment-variables)
+16. [Operating the Stack](#16-operating-the-stack)
+17. [Troubleshooting](#17-troubleshooting)
+18. [Significant Changes Since Day 5 Design](#18-significant-changes-since-day-5-design)
+19. [Current Scope and Future Improvements](#19-current-scope-and-future-improvements)
+20. [Documentation](#20-documentation)
+21. [Team](#21-team)
 
 ---
 
 ## 1. Project Overview
 
-Waypoint Pulse helps Waypoint Group plan and execute daily deliveries while considering operational constraints such as:
+Waypoint Pulse helps Waypoint Group plan and execute daily deliveries while respecting operational constraints:
 
-- Vehicle capacity
+- Vehicle capacity (weight and volume)
 - Vehicle temperature capability
 - Chilled and ambient products
 - Van-only outlet restrictions
@@ -32,57 +51,9 @@ Waypoint Pulse helps Waypoint Group plan and execute daily deliveries while cons
 - Trip time limits
 - Fuel and distance estimates
 
-The platform also explains why certain orders cannot be served and records them as explicit deferrals for dispatcher review.
+Orders that cannot be served are never silently dropped. They are recorded as **explicit deferrals with reasons** for dispatcher review.
 
----
-
-## 2. Core Workflow
-
-```text
-Seeded Orders
-      |
-      v
-Dispatcher
-Generate delivery plan
-      |
-      v
-Loader
-Verify reverse-sequence loading
-      |
-      v
-Vehicle Ready
-      |
-      v
-Driver
-Deliver route + Proof of Delivery
-      |
-      v
-Store Manager
-Confirm receipt
-      |
-      v
-Delivery Loop Closed
-```
-
----
-
-## 3. Main Features
-
-### Dispatcher Control Tower
-
-The Dispatcher can:
-
-- Generate a new delivery plan
-- Review total orders
-- Review served and deferred orders
-- View assigned vehicles and trips
-- Review route distance
-- Review estimated fuel consumption
-- Inspect individual trip stops
-- Review explainable deferral reasons
-- Re-plan when necessary
-
-Example demo result for the provided scenario:
+**Demo result for the provided scenario (2025-10-02, Peliyagoda depot):**
 
 ```text
 Orders:      93
@@ -94,384 +65,60 @@ Distance:    2,570 km
 Fuel:        432.8 L
 ```
 
-### Loader Console
-
-The Loader receives dispatcher-generated trips.
-
-Features include:
-
-- Assigned trip selection
-- Vehicle and route information
-- Weight and volume information
-- Temperature requirement display
-- Reverse-sequence loading
-- Per-order load verification
-- Shortfall recording
-- Vehicle Ready confirmation
-
-Reverse-sequence loading means that the final delivery stop is loaded first so that the first delivery is positioned closest to the vehicle door.
-
-### Driver Route
-
-The Driver interface is designed as a mobile-first experience.
-
-Features include:
-
-- Ready trip loading
-- Ordered route stops
-- Stop details
-- Mark Arrived
-- Proof of Delivery
-- Receiver name
-- Delivery notes
-- Mark Delivered
-- Trip progress
-- Trip completion
-
 ---
 
-## 4. Offline and Recovery Support
+## 2. Core Workflow
 
-The Driver workflow includes offline recovery support.
-
-The application stores the active route and pending driver actions in browser local storage.
-
-When connectivity is unavailable:
-
-```text
-Driver Action
-     |
-     v
-Stored Locally
-     |
-     v
-Pending Sync Queue
-     |
-     v
-Connection Restored
-     |
-     v
-Actions Synced to API
-```
-
-This allows a driver who already loaded the route to continue recording delivery actions during temporary connectivity loss.
-
-> **Note:** The current implementation provides application-level cached route and sync-queue recovery. It is not intended to be a full offline-installable PWA.
-
----
-
-## 5. Store Manager
-
-The Store Manager interface closes the delivery loop.
-
-Features include:
-
-- Search by outlet ID
-- Outlet information
-- Delivered order history
-- Pending receipt count
-- Delivery details
-- Confirmed receiver information
-- Receipt notes
-- Receipt confirmation
-- Receipt confirmation timestamp
-
-Example:
-
-```text
-Driver marks delivery complete
-        |
-        v
-Store Manager loads outlet
-        |
-        v
-Pending Receipt
-        |
-        v
-Confirm Receipt
-        |
-        v
-Receipt Confirmed
+```mermaid
+flowchart TD
+    A[Seeded Orders] --> B[Dispatcher<br/>Generate delivery plan]
+    B --> C[Loader<br/>Verify reverse-sequence loading]
+    C --> D[Vehicle Ready]
+    D --> E[Driver<br/>Deliver route + Proof of Delivery]
+    E --> F[Store Manager<br/>Confirm receipt]
+    F --> G[Delivery Loop Closed]
 ```
 
 ---
 
-## 6. Planning Engine
+## 3. Judge Quick Start
 
-Waypoint Pulse uses a deterministic and explainable planning approach.
-
-The planner follows a constrained greedy / best-fit allocation strategy.
-
-Important planning rules include:
-
-### Brand and District
-
-A trip contains orders belonging to the same:
-
-```text
-Brand + District
-```
-
-### Temperature Rules
-
-```text
-Chilled order
-    -> Reefer vehicle required
-
-Ambient order
-    -> Reefer or suitable non-reefer vehicle
-```
-
-### Van-only Orders
-
-Orders marked as `van_only` must be allocated to an appropriate van.
-
-### Capacity
-
-For every trip:
-
-```text
-Total Trip Weight <= Vehicle Weight Capacity
-```
-
-and:
-
-```text
-Total Trip Volume <= Vehicle Volume Capacity
-```
-
-Orders are not split between vehicles.
-
-### Maximum Trips
-
-A vehicle can perform a maximum of:
-
-```text
-2 trips per day
-```
-
-subject to the available operating time.
-
-### Fresh Operating Budget
-
-Fresh operations use an operational time budget based on the morning delivery period. Planning feasibility uses the challenge trip-time calculation.
-
-### Style and Tech Operating Budget
-
-Style and Tech deliveries operate using the longer trading-day delivery budget.
-
----
-
-## 7. Trip Time Calculation
-
-The planner calculates operational trip time from:
-
-```text
-Outbound Travel
-+
-Inter-stop Travel
-+
-Handling / Service Time
-```
-
-Conceptually:
-
-```text
-Trip Minutes
-=
-Depot-to-District Travel
-+
-Inter-stop Time x (Number of Orders - 1)
-+
-Total Stop Handling Time
-```
-
-Waiting time and return-to-depot travel are not used as part of the official feasibility calculation.
-
-Additional schedule timestamps are shown in the user interface to make trips easier for operations teams to understand.
-
----
-
-## 8. Service Allowances
-
-Handling time depends on:
-
-```text
-Brand
-+
-Dock Type
-```
-
-Seeded service allowance combinations include:
-
-- **Fresh:** Rear, Street, Mall
-- **Style:** Rear, Street, Mall
-- **Tech:** Rear, Street, Mall
-
----
-
-## 9. Explainable Deferrals
-
-Orders that cannot be feasibly assigned are not silently removed. They are stored as explicit deferrals.
-
-Examples of possible reasons include:
-
-- `DISTRICT MISMATCH`
-- `TEMPERATURE REQUIREMENT`
-- `VAN REQUIRED`
-- `CAPACITY LIMIT`
-- `VEHICLE AVAILABILITY`
-- `TIME BUDGET`
-- `NO FEASIBLE VEHICLE`
-
-The Dispatcher can review these reasons directly in the Control Tower.
-
----
-
-## 10. Distance and Fuel
-
-Waypoint Pulse displays estimated route distance and fuel usage.
-
-The current implementation estimates trip distance using:
-
-```text
-Outbound Distance
-+
-Inter-stop Distance
-+
-Return Distance
-```
-
-Fuel usage is estimated using the vehicle's fuel efficiency:
-
-```text
-Fuel Used
-=
-Estimated Distance / Vehicle km-per-litre
-```
-
-This fuel calculation is an implementation assumption used to make the operational plan easier to evaluate.
-
----
-
-## 11. Technology Stack
-
-**Frontend**
-
-- Next.js 16
-- React 19
-- TypeScript
-- Tailwind CSS
-
-**Backend**
-
-- FastAPI
-- Python 3.12
-- SQLAlchemy
-- Uvicorn
-
-**Database**
-
-- PostgreSQL 18
-
-**Deployment / Local Environment**
-
-- Docker
-- Docker Compose
-
----
-
-## 12. Project Structure
-
-```text
-JKoDe_WaypointPulse/
-│
-├── apps/
-│   │
-│   ├── web/
-│   │   ├── app/
-│   │   │   ├── dispatcher/
-│   │   │   ├── loader/
-│   │   │   ├── driver/
-│   │   │   └── store/
-│   │   ├── Dockerfile
-│   │   ├── package.json
-│   │   └── .env.example
-│   │
-│   └── api/
-│       ├── app/
-│       │   ├── main.py
-│       │   ├── database.py
-│       │   ├── models/
-│       │   ├── schemas/
-│       │   ├── routers/
-│       │   ├── services/
-│       │   └── planner/
-│       │
-│       ├── scripts/
-│       │   └── seed.py
-│       │
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       └── .env.example
-│
-├── data/
-│   └── seed/
-│
-├── docs/
-│
-├── docker-compose.yml
-├── .gitignore
-└── README.md
-```
-
----
-
-## 13. Quick Start with Docker
-
-Docker is the recommended way to run the full system.
+The full stack runs locally with Docker Compose.
 
 ### Prerequisites
 
-Install:
-
-- Docker Desktop
+- Docker Desktop (must be running)
 - Git
 
-Docker Desktop must be running before starting the project.
-
-### Step 1 — Clone the Repository
+### Step 1: Clone the repository
 
 ```bash
 git clone <REPOSITORY_URL>
 cd JKoDe_WaypointPulse
 ```
 
-### Step 2 — Build and Start Containers
+### Step 2: Configure environment
+
+Create a `.env` file in the repository root from `.env.example`:
 
 ```bash
-docker compose up --build -d
+cp .env.example .env        # macOS / Linux / Git Bash
+copy .env.example .env      # Windows CMD
 ```
 
-Check the containers:
+Generate a strong secret and set it in `.env`:
 
 ```bash
-docker compose ps
+python -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
-Expected services:
-
-```text
-waypoint_postgres
-waypoint_api
-waypoint_web
+```env
+JWT_SECRET_KEY=your_secure_random_secret
 ```
 
-### Step 3 — Add the Competition Dataset
+### Step 3: Provide the challenge datasets
 
-The competition-provided datasets are intentionally **not included in this repository**.
-
-Before seeding the database, place the supplied dataset files inside:
+The competition-provided datasets are intentionally **not included** in this repository. Place the supplied files in:
 
 ```text
 data/seed/
@@ -489,372 +136,546 @@ task2b_peak_day_fleet.csv
 vehicles.csv
 ```
 
-Do not redistribute these competition-provided datasets publicly.
+> Do not redistribute the competition-provided datasets publicly.
 
-After the files are available, seed the database:
+### Step 4: Start the full stack
+
+From the repository root:
 
 ```bash
-docker compose exec api python -m scripts.seed
+docker compose up --build
 ```
 
-Expected dataset summary:
+(Add `-d` to run in the background.) Docker Compose will:
 
-```text
-Outlets seeded: 120
-Vehicles seeded: 60
-Calendar rows seeded: 910
-Orders seeded total: 92307
-Service allowances seeded: 9
-District travel rows seeded: 12
-Vehicle availability rows seeded: 38
+1. Start PostgreSQL.
+2. Wait until PostgreSQL is healthy.
+3. Create the required database tables.
+4. Seed the challenge data on a fresh database.
+5. Seed the four demo role accounts.
+6. Start the FastAPI backend.
+7. Start the Next.js frontend.
+
+Verify the containers:
+
+```bash
+docker compose ps
 ```
 
-### Step 4 — Open the Application
+Expected services: `waypoint_postgres`, `waypoint_api`, `waypoint_web`.
+
+### Step 5: Open the application
 
 | Page | URL |
 |---|---|
 | Frontend | http://localhost:3000 |
+| **Login** | http://localhost:3000/login |
 | Dispatcher | http://localhost:3000/dispatcher |
 | Loader | http://localhost:3000/loader |
 | Driver | http://localhost:3000/driver |
 | Store Manager | http://localhost:3000/store |
-| FastAPI docs | http://localhost:8000/docs |
+| API documentation | http://localhost:8000/docs |
 | Health endpoint | http://localhost:8000/health |
 
----
+### Seeded Judge Accounts
 
-## 14. Demo Scenario
+| Role | Email | Password |
+|---|---|---|
+| Dispatcher | `dispatcher@waypoint.demo` | `Dispatcher@2026!` |
+| Loader | `loader@waypoint.demo` | `Loader@2026!` |
+| Driver | `driver@waypoint.demo` | `Driver@2026!` |
+| Store Manager | `store@waypoint.demo` | `Store@2026!` |
 
-The primary demonstration date is:
-
-```text
-2025-10-02
-```
-
-Depot:
-
-```text
-Peliyagoda
-```
-
-The seeded demo day contains **93 orders**.
+Each account is restricted to its assigned operational role. These are demonstration credentials for judging only.
 
 ---
 
-## 15. Judge Walkthrough
+## 4. Judge Walkthrough
 
-The following walkthrough demonstrates the main end-to-end system.
+**Demo date:** `2025-10-02` · **Depot:** `Peliyagoda` · **Seeded demo orders:** 93
 
-### Step 1 — Dispatcher
+### Step 1: Dispatcher
 
-Open http://localhost:3000/dispatcher and generate a plan for `2025-10-02`.
+1. Sign in with the Dispatcher account and open the **Control Tower**.
+2. Select the planning date (`2025-10-02`) and depot.
+3. **Generate** a delivery plan.
+4. Review: orders, served, deferred, trips, vehicles, distance, fuel, vehicle allocation, trip schedules and capacity usage.
+5. Expand trips to inspect individual stops.
+6. Review the **Explainable Deferrals** panel to see why unallocated orders were deferred.
 
-Review:
+### Step 2: Loader
 
-- Orders
-- Served
-- Deferred
-- Trips
-- Distance
-- Fuel
+1. Sign out, then sign in with the Loader account.
+2. Select a planned trip and review vehicle, brand, district, weight, volume, stops and temperature requirement.
+3. Review the **reverse-sequence loading plan** (last stop is loaded first).
+4. Verify each load item. Record a shortfall if necessary.
+5. When every item is verified, **Vehicle Ready** becomes available. Mark the trip Ready.
 
-Expand trips to inspect individual stops. Review the **Explainable Deferrals** panel to see why unallocated orders were deferred.
+### Step 3: Driver
 
-### Step 2 — Loader
-
-Open http://localhost:3000/loader and select an assigned trip.
-
-Review:
-
-- Vehicle
-- Trip
-- Brand
-- District
-- Weight
-- Volume
-- Stops
-- Temperature requirement
-
-Verify every load item. The list is shown in reverse loading order. When every item is verified, **Vehicle Ready** becomes available. Mark the vehicle ready for dispatch.
-
-### Step 3 — Driver
-
-Open http://localhost:3000/driver. The Driver receives a ready trip.
-
-1. Select a route stop.
-2. Click **Mark Arrived**.
-3. Enter Proof of Delivery information (Receiver Name, Delivery Note).
+1. Sign in with the Driver account and open a Ready trip.
+2. Select a route stop and click **Mark Arrived**.
+3. Enter Proof of Delivery (Receiver Name, Delivery Note).
 4. Click **Mark Delivered**.
-5. Repeat until all stops are complete.
-6. Click **Complete Trip**.
+5. Repeat for all stops, then click **Complete Trip**.
 
-### Step 4 — Offline Recovery Test
+### Step 4: Offline recovery test
 
 While the Driver route is already loaded:
 
 1. Open browser developer tools.
-2. Change the network to **Offline**.
+2. Set the network to **Offline**.
 3. Perform a supported driver action.
-4. Observe the pending sync queue.
+4. Observe the **pending sync queue**.
 5. Restore the network.
 6. The queued action is synchronized with the backend.
 
-This demonstrates recovery from temporary network connectivity failure.
+### Step 5: Store Manager
 
-### Step 5 — Store Manager
-
-Open http://localhost:3000/store.
-
-1. Enter the outlet ID for a delivered order (example: `OUT004`).
-2. Click **Load Outlet**.
-3. Review the delivered order.
-4. If the receipt is pending, enter **Confirmed By** and **Receipt Note**.
-5. Click **Confirm Receipt**.
+1. Sign in with the Store Manager account and open the store page.
+2. Enter the outlet ID of a delivered order (example: `OUT004`) and click **Load Outlet**.
+3. Review delivered and pending deliveries.
+4. If a receipt is pending, enter **Confirmed By** and **Receipt Note**, then click **Confirm Receipt**.
 
 The delivery lifecycle is now closed.
 
 ---
 
-## 16. API Overview
+## 5. Main Features
 
-The FastAPI backend exposes endpoints for the main operational areas:
+### Dispatcher Control Tower
 
+- Generate a new delivery plan
+- Review total, served and deferred orders
+- View assigned vehicles and trips
+- Review route distance and estimated fuel consumption
+- Inspect individual trip stops
+- Review explainable deferral reasons
+- Re-plan when necessary
+
+### Loader Console
+
+- Assigned trip selection
+- Vehicle and route information
+- Weight, volume and temperature requirement display
+- Reverse-sequence loading
+- Per-order load verification
+- Shortfall recording
+- Vehicle Ready confirmation
+
+> **Reverse-sequence loading:** the final delivery stop is loaded first, so the first delivery sits closest to the vehicle door.
+
+### Driver Route (mobile-first)
+
+- Ready trip loading
+- Ordered route stops and stop details
+- Mark Arrived
+- Proof of Delivery (receiver name, delivery notes)
+- Mark Delivered
+- Trip progress and trip completion
+
+### Store Manager
+
+- Search by outlet ID and view outlet information
+- Delivered order history and pending receipt count
+- Delivery details and confirmed receiver information
+- Receipt notes, receipt confirmation and confirmation timestamp
+
+---
+
+## 6. Offline and Recovery Support
+
+The Driver workflow stores the active route and pending driver actions in browser local storage.
+
+```mermaid
+flowchart TD
+    A[Driver Action] --> B[Stored Locally]
+    B --> C[Pending Sync Queue]
+    C --> D[Connection Restored]
+    D --> E[Actions Synced to API]
+```
+
+This lets a driver who has already loaded the route keep recording delivery actions during temporary connectivity loss.
+
+> **Note:** The current implementation provides application-level cached route and sync-queue recovery. It is not a full offline-installable PWA.
+
+---
+
+## 7. Planning Engine
+
+Waypoint Pulse uses a **deterministic and explainable** planning approach: a constrained greedy / best-fit allocation strategy. Generated plans are persisted to PostgreSQL and then consumed by the Loader and Driver workflows.
+
+### Planning rules
+
+| Rule | Description |
+|---|---|
+| Brand + District | A trip contains orders of the same **Brand + District** only |
+| Chilled orders | Require a **reefer** vehicle |
+| Ambient orders | May use a reefer or a suitable non-reefer vehicle |
+| Van-only orders | Orders marked `van_only` must be allocated to an appropriate van |
+| Weight capacity | Total trip weight ≤ vehicle weight capacity |
+| Volume capacity | Total trip volume ≤ vehicle volume capacity |
+| No order splitting | An order is never split between vehicles |
+| Max trips | Maximum **2 trips per vehicle per day**, subject to available operating time |
+| Depot | Orders are planned for the selected depot |
+| Availability | Only vehicles available on the planning date are used |
+
+### Operating budgets
+
+- **Fresh:** an operational time budget based on the morning delivery period. Feasibility uses the challenge trip-time calculation.
+- **Style and Tech:** the longer trading-day delivery budget.
+
+### Trip time calculation
+
+```text
+Trip Minutes
+  = Depot-to-District Travel
+  + Inter-stop Time x (Number of Orders - 1)
+  + Total Stop Handling Time
+```
+
+Waiting time and return-to-depot travel are **not** part of the official feasibility calculation. Additional schedule timestamps are shown in the UI to make trips easier for operations teams to follow.
+
+### Service allowances
+
+Handling time depends on **Brand + Dock Type**. Seeded combinations (9 total):
+
+- **Fresh:** Rear, Street, Mall
+- **Style:** Rear, Street, Mall
+- **Tech:** Rear, Street, Mall
+
+---
+
+## 8. Explainable Deferrals
+
+Orders that cannot be feasibly assigned are stored as explicit deferrals and shown in the Control Tower. Possible reasons include:
+
+- `DISTRICT MISMATCH`
+- `TEMPERATURE REQUIREMENT`
+- `VAN REQUIRED`
+- `CAPACITY LIMIT`
+- `VEHICLE AVAILABILITY`
+- `TIME BUDGET`
+- `NO FEASIBLE VEHICLE`
+
+---
+
+## 9. Distance and Fuel
+
+Estimated trip distance:
+
+```text
+Outbound Distance + Inter-stop Distance + Return Distance
+```
+
+Estimated fuel usage:
+
+```text
+Fuel Used = Estimated Distance / Vehicle km-per-litre
+```
+
+> The distance (including return leg) and fuel calculation are implementation assumptions used to make plans easier to evaluate. They are separate from the official feasibility calculation in section 7.
+
+---
+
+## 10. Authentication and Security
+
+Waypoint Pulse implements secure role-based authentication:
+
+- Argon2 password hashing
+- Short-lived JWT access tokens
+- Opaque refresh tokens stored only as hashes in the database
+- HttpOnly refresh-token cookies
+- Refresh-token rotation
+- Refresh-session revocation
+- Logout and logout-all support
+- Backend role-based access control (RBAC)
+- Frontend role guards
+- Automatic session restoration after browser refresh
+
+Access tokens are kept in frontend memory rather than persistent browser storage.
+
+**Role isolation (enforced on the backend):**
+
+| Role | Permitted operations |
+|---|---|
+| Dispatcher | Planning and dashboard operations |
+| Loader | Loading verification and Ready-state operations |
+| Driver | Arrival, delivery and trip-completion operations |
+| Store Manager | Store-delivery and receipt-confirmation operations |
+
+Frontend guards improve user experience; backend RBAC is the actual authorization boundary.
+
+**Authentication flow:**
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as Web App
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    U->>W: Email + Password
+    W->>API: POST /api/auth/login
+    API->>DB: Verify user + Argon2 password
+    API-->>W: JWT access token
+    API-->>W: HttpOnly refresh cookie
+
+    W->>API: Authenticated API request
+    API->>API: Validate JWT + role
+    API-->>W: Protected response
+
+    W->>API: POST /api/auth/refresh
+    API->>DB: Rotate refresh session
+    API-->>W: New access token
+```
+
+---
+
+## 11. Architecture
+
+```mermaid
+flowchart LR
+    U[Users] --> W[Next.js Web App]
+    W --> A[FastAPI Backend]
+    A --> P[Planning Engine]
+    A --> AU[Authentication & RBAC]
+    A --> DB[(PostgreSQL)]
+    P --> DB
+    D[Challenge Seed Data] --> S[Seed Process]
+    S --> DB
+```
+
+The planning engine consumes orders, outlets, vehicles, service allowances, district travel, calendar data and fleet availability. The API exposes these groups of endpoints:
+
+- `/api/auth`
 - `/api/planner`
 - `/api/loader`
 - `/api/driver`
 - `/api/store`
 
-Interactive API documentation is available at http://localhost:8000/docs.
+Interactive documentation: http://localhost:8000/docs. See [`docs/architecture.md`](docs/architecture.md) for more detail.
 
 ---
 
-## 17. Environment Variables
+## 12. Technology Stack
 
-Example backend environment configuration:
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
+| Backend | FastAPI, Python 3.12, SQLAlchemy, Uvicorn |
+| Database | PostgreSQL 18 |
+| Authentication | Argon2, JWT access tokens, opaque refresh tokens, HttpOnly cookies |
+| Infrastructure | Docker, Docker Compose |
+
+---
+
+## 13. Project Structure
+
+```text
+JKoDe_WaypointPulse/
+├── apps/
+│   ├── web/
+│   │   ├── app/
+│   │   │   ├── login/
+│   │   │   ├── dispatcher/
+│   │   │   ├── loader/
+│   │   │   ├── driver/
+│   │   │   └── store/
+│   │   ├── Dockerfile
+│   │   ├── package.json
+│   │   └── .env.example
+│   └── api/
+│       ├── app/
+│       │   ├── main.py
+│       │   ├── database.py
+│       │   ├── models/
+│       │   ├── schemas/
+│       │   ├── routers/
+│       │   ├── services/
+│       │   └── planner/
+│       ├── scripts/
+│       │   └── seed.py
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       └── .env.example
+├── data/
+│   └── seed/                 # place challenge datasets here (not committed)
+├── docs/
+│   ├── architecture.md
+│   ├── data-model.md
+│   └── ai-disclosure.md
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 14. Database and Seeded Data
+
+**Main tables:**
+
+`users`, `auth_sessions`, `outlets`, `vehicles`, `orders`, `calendar_days`, `service_allowances`, `district_travel`, `vehicle_availability`, `plans`, `trips`, `trip_stops`, `deferrals`.
+
+**Fresh installation seeds:**
+
+```text
+Users:                 4
+Outlets:               120
+Vehicles:              60
+Calendar rows:         910
+Orders:                92,307
+Service allowances:    9
+District travel rows:  12
+Vehicle availability:  38
+```
+
+On a clean PostgreSQL volume, the tables are created automatically and then seeded. On subsequent startups, existing orders are detected and the large order dataset is skipped to reduce startup time.
+
+See [`docs/data-model.md`](docs/data-model.md) for the entity relationships.
+
+---
+
+## 15. Environment Variables
+
+**Repository root `.env`:**
+
+```env
+JWT_SECRET_KEY=replace_with_a_long_random_secret
+```
+
+**Backend (local, non-Docker run):**
 
 ```env
 DATABASE_URL=postgresql://postgres:your_password@localhost:5432/waypoint_pulse
 ```
 
-Docker Compose automatically provides the internal database connection:
+Docker Compose provides the internal database connection automatically:
 
 ```text
 postgresql://postgres:postgres@db:5432/waypoint_pulse
 ```
 
-Example frontend environment configuration:
+**Frontend:**
 
 ```env
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
-Inside the provided Docker setup the browser accesses the exposed API through `http://localhost:8000`.
+Inside the provided Docker setup, the browser reaches the API through `http://localhost:8000`.
 
-> Real credentials and local `.env` files must not be committed to source control.
-
----
-
-## 18. Database
-
-Main tables include:
-
-- `calendar_days`
-- `deferrals`
-- `district_travel`
-- `orders`
-- `outlets`
-- `plans`
-- `service_allowances`
-- `trip_stops`
-- `trips`
-- `users`
-- `vehicle_availability`
-- `vehicles`
+> Real credentials and local `.env` files must never be committed to source control.
 
 ---
 
-## 19. Seeded Reference Data
+## 16. Operating the Stack
 
-The system seeds:
+| Task | Command |
+|---|---|
+| First start / rebuild | `docker compose up --build` |
+| Restart (already seeded) | `docker compose up -d` |
+| Stop (data preserved) | `docker compose down` |
+| Stop and **delete database** | `docker compose down -v` |
 
-- 120 outlets
-- 60 vehicles
-- 910 calendar rows
-- 92,307 historical orders
-- 9 service allowance records
-- 12 district travel records
-- 38 peak-day vehicle availability records
+PostgreSQL data lives in the Docker named volume `waypoint_postgres_data`. Normal shutdown does not remove it.
 
-These records are used by the planning engine to construct and validate delivery plans.
-
----
-
-## 20. Data Persistence
-
-PostgreSQL data is stored using a Docker named volume: `waypoint_postgres_data`.
-
-Normal container shutdown does not remove the database.
-
-To stop the application:
-
-```bash
-docker compose down
-```
-
-To remove the containers and database volume:
-
-```bash
-docker compose down -v
-```
-
-> **Warning:** `docker compose down -v` removes the Docker PostgreSQL database and requires the seed command to be run again.
+> **Warning:** `docker compose down -v` deletes the database volume. The next `docker compose up --build` will recreate and reseed everything, so the dataset files must still be present in `data/seed/`.
 
 ---
 
-## 21. Restarting the Application
+## 17. Troubleshooting
 
-If the database has already been seeded:
+**Docker engine not running** (`failed to connect to the docker API`): start Docker Desktop, then verify with `docker info`.
 
-```bash
-docker compose up -d
-```
-
-No reseeding is required unless the database volume was removed.
-
----
-
-## 22. Troubleshooting
-
-### Docker Engine Not Running
-
-If Docker reports `failed to connect to the docker API`, start Docker Desktop and verify:
+**Port already in use:** stop any local Next.js or FastAPI dev servers, then check the ports.
 
 ```bash
-docker info
-```
-
-### Port Already in Use
-
-Check:
-
-```bash
-netstat -ano | findstr :3000
+netstat -ano | findstr :3000     # Windows
 netstat -ano | findstr :8000
 ```
 
-Stop any locally running Next.js or FastAPI development servers before starting Docker.
+**Login fails or the app refuses to start:** confirm `.env` exists in the repository root and `JWT_SECRET_KEY` is set.
 
-### Empty Loader or Store Page
+**Empty Loader/Store page** (`No load plan available`, or outlet not found): the database may not be seeded, or no plan has been generated yet.
 
-If the Loader reports `No load plan available`, or an outlet cannot be found, verify that the database has been seeded:
+1. Confirm the dataset files are in `data/seed/`.
+2. As a fallback, run the seed manually:
+   ```bash
+   docker compose exec api python -m scripts.seed
+   ```
+3. Sign in as Dispatcher and generate a delivery plan.
+
+**View logs:**
 
 ```bash
-docker compose exec api python -m scripts.seed
-```
-
-After seeding, generate a delivery plan from the Dispatcher interface.
-
-### View Logs
-
-```bash
-# All services
-docker compose logs
-
-# API only
-docker compose logs api
-
-# Web only
-docker compose logs web
-
-# Database only
-docker compose logs db
-
-# Follow logs continuously
-docker compose logs -f
+docker compose logs            # all services
+docker compose logs api        # API only
+docker compose logs web        # web only
+docker compose logs db         # database only
+docker compose logs -f         # follow continuously
 ```
 
 ---
 
-## 23. Design Principles
+## 18. Significant Changes Since Day 5 Design
 
-Waypoint Pulse is built around four principles:
+The implementation evolved beyond the initial design prototype:
 
-- **Plan** — Build feasible delivery plans using operational constraints.
-- **Explain** — Clearly communicate why an order was served or deferred.
-- **Deliver** — Connect dispatcher, loader and driver operations.
-- **Recover** — Allow delivery activity to continue through temporary connectivity problems.
-
----
-
-## 24. Current Scope
-
-The current prototype includes:
-
-- Dispatcher delivery planning
-- Constraint validation
-- Explainable deferrals
-- Loader verification
-- Vehicle-ready workflow
-- Driver route execution
-- Proof of Delivery
-- Offline driver action queue
-- Synchronization recovery
-- Store receipt confirmation
-- Docker-based reproducible setup
-
-Orders used in the demonstration are currently loaded from the supplied seeded dataset. Interactive creation of brand-new store orders is outside the current implemented prototype flow.
+- Replaced static prototype data with a PostgreSQL-backed operational system
+- Added deterministic delivery-plan generation and persistence
+- Added capacity, temperature, vehicle-access and time-budget constraints
+- Added explicit order deferral reasons
+- Added fuel and distance estimation
+- Added Loader verification and Ready-state workflow
+- Added Driver proof of delivery
+- Added offline-first Driver queueing and synchronization
+- Added Store Manager receipt confirmation
+- Added secure multi-role authentication
+- Added backend role-based access control
+- Added Dockerized database, API and frontend services
+- Added automatic clean-database table creation and dataset seeding
 
 ---
 
-## 25. Future Improvements
+## 19. Current Scope and Future Improvements
 
-Potential future improvements include:
+**Current prototype includes:** dispatcher planning, constraint validation, explainable deferrals, loader verification, vehicle-ready workflow, driver route execution, proof of delivery, offline action queue and sync recovery, store receipt confirmation, role-based authentication, and a Docker-based reproducible setup.
+
+Orders in the demonstration come from the supplied seeded dataset. Interactive creation of new store orders is outside the current prototype flow.
+
+**Potential future improvements:**
 
 - Store-side new order creation
-- Authentication and role-based access control
 - Full installable PWA support
 - Advanced route optimization
-- Real road routing API integration
+- Real road-routing API integration
 - Live GPS tracking
-- Push notifications
-- Automatic dispatch alerts
+- Push notifications and automatic dispatch alerts
 - Operational analytics
 - Real-time vehicle telemetry
 - Advanced demand forecasting
 
 ---
 
-## 26. Team
+## 20. Documentation
 
-- **Team:** JKoDe
-- **Project:** Waypoint Pulse
-- **Competition:** Tech-Triathlon 2026
-- **Concept:** Plan. Explain. Deliver. Recover.
+Additional technical documentation:
 
-### Final Demo Flow
-
-```text
-Dispatcher
-    ↓
-Generate Plan
-    ↓
-Loader
-    ↓
-Verify Load
-    ↓
-Vehicle Ready
-    ↓
-Driver
-    ↓
-Arrive + Deliver + POD
-    ↓
-Store Manager
-    ↓
-Confirm Receipt
-    ↓
-Delivery Complete
-```
+- [`docs/architecture.md`](docs/architecture.md): system architecture and flows
+- [`docs/data-model.md`](docs/data-model.md): database entities and relationships
+- [`docs/ai-disclosure.md`](docs/ai-disclosure.md): AI tool usage disclosure
 
 ---
 
-**Waypoint Pulse — Explainable logistics from planning to proof of delivery.**
+## 21. Team
+
+- **Team:** JKoDe
+- **Solution:** Waypoint Pulse
+- **Competition:** Tech-Triathlon 2026
+- **Tagline:** Plan. Explain. Deliver. Recover.
+
+---
+
+**Waypoint Pulse: Explainable logistics from planning to proof of delivery.**
