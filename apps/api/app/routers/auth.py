@@ -71,8 +71,8 @@ def set_refresh_cookie(
         key=settings.REFRESH_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
-        secure=False,  # change to True when production uses HTTPS
-        samesite="lax",
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/auth",
     )
@@ -82,6 +82,8 @@ def clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         key=settings.REFRESH_COOKIE_NAME,
         path="/api/auth",
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
     )
 
 
@@ -228,9 +230,6 @@ def refresh(
         clear_refresh_cookie(response)
         raise credentials_error()
 
-    # Reuse detection:
-    # presenting an already-revoked refresh token revokes
-    # every active token in the same token family.
     if session.revoked_at is not None:
         (
             db.query(AuthSession)
@@ -247,7 +246,6 @@ def refresh(
         )
 
         db.commit()
-
         clear_refresh_cookie(response)
 
         raise HTTPException(
@@ -279,7 +277,6 @@ def refresh(
         clear_refresh_cookie(response)
         raise credentials_error()
 
-    # Rotate old refresh token.
     session.revoked_at = now
     session.last_used_at = now
 
